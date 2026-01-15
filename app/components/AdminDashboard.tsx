@@ -125,19 +125,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
       bingoCells: []
     };
 
-    // 타임아웃 설정 (10초)
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout')), 10000)
-    );
-
     try {
-      await Promise.race([
-        (async () => {
-          await createSession(newSession);
-          await initGameState(sessionId);
-        })(),
-        timeout
-      ]);
+      await createSession(newSession);
       setNewSessionName('');
     } catch (error) {
       console.error('세션 생성 오류:', error);
@@ -201,12 +190,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
       return;
     }
 
-    await updateSession(currentSession.id, { status: 'active' });
-    await updateGameState(currentSession.id, {
-      phase: GamePhase.SelectingCard,
-      currentRound: 1,
-      currentTurnTeamIndex: 0
-    });
+    try {
+      // 게임 상태 초기화
+      await initGameState(currentSession.id);
+      await updateSession(currentSession.id, { status: 'active' });
+      await updateGameState(currentSession.id, {
+        phase: GamePhase.SelectingCard,
+        currentRound: 1,
+        currentTurnTeamIndex: 0
+      });
+    } catch (error) {
+      console.error('게임 시작 오류:', error);
+      alert('게임 시작에 실패했습니다. 다시 시도해주세요.');
+    }
   };
 
   // 게임 일시정지/재개
