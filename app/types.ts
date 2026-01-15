@@ -125,6 +125,7 @@ export interface SessionSettings {
   bingoLinesToWin: number;    // 승리에 필요한 빙고 줄 수 (기본: 3)
   answerTimeLimit: number;    // 답변 제한 시간 (초, 기본: 120)
   maxTeams: number;           // 최대 팀 수 (기본: 8)
+  isActive?: boolean;         // 세션 활성화 여부 (기본: true)
 }
 
 // 세션
