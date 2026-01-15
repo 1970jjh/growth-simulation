@@ -384,7 +384,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
     <div className="min-h-screen bg-gray-100 p-4">
       <div className="max-w-7xl mx-auto">
         <header className="mb-6">
-          <h1 className="text-3xl font-black text-gray-800">빙고 교육 게임 관리자</h1>
+          <h1 className="text-3xl font-black text-gray-800">Workplace Scenario Bingo - Admin</h1>
           <p className="text-gray-600">세션을 생성하고 게임을 관리하세요</p>
         </header>
 
@@ -515,7 +515,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <input
                         type="file"
                         ref={fileInputRef}
@@ -530,15 +530,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                         <Upload className="w-4 h-4" /> JSON 업로드
                       </button>
 
-                      {currentSession.status === 'waiting' && currentSession.bingoCards.length > 0 && (
+                      {/* 게임 시작 버튼 - 항상 표시 */}
+                      {currentSession.status === 'waiting' && (
                         <button
                           onClick={handleStartGame}
-                          className="px-4 py-2 bg-green-500 text-white font-bold border-2 border-black hover:bg-green-600 flex items-center gap-1"
+                          disabled={currentSession.bingoCards.length === 0}
+                          className={`px-4 py-2 font-bold border-2 border-black flex items-center gap-1 ${
+                            currentSession.bingoCards.length > 0
+                              ? 'bg-green-500 text-white hover:bg-green-600'
+                              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          }`}
                         >
                           <Play className="w-4 h-4" /> 게임 시작
                         </button>
                       )}
 
+                      {/* 게임 진행 중 버튼들 */}
                       {currentSession.status === 'active' && (
                         <>
                           <button
