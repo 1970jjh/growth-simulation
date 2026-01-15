@@ -62,6 +62,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
+  // 카드 상세보기 모달
+  const [selectedCardIndex, setSelectedCardIndex] = useState<number | null>(null);
+  const [showCardModal, setShowCardModal] = useState(false);
+
   // 카드 업로드
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -369,6 +373,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
     });
   };
 
+  // 카드 상세보기 (관리자)
+  const handleViewCard = (cellIndex: number) => {
+    setSelectedCardIndex(cellIndex);
+    setShowCardModal(true);
+  };
+
+  // 선택된 카드 정보 가져오기
+  const getSelectedCard = (): GameCard | null => {
+    if (selectedCardIndex === null || !currentSession) return null;
+    const cell = currentSession.bingoCells[selectedCardIndex];
+    if (!cell) return null;
+    return currentSession.bingoCards.find(c => c.id === cell.cardId) || null;
+  };
+
+  // 선택된 셀의 답변 가져오기
+  const getSelectedCellAnswers = (): TeamAnswer[] => {
+    if (selectedCardIndex === null || !gameState) return [];
+    // 해당 라운드의 답변 찾기
+    const roundResult = gameState.roundResults.find(r => r.cellIndex === selectedCardIndex);
+    return roundResult?.allAnswers || [];
+  };
+
   // 게임 종료
   const handleEndGame = async () => {
     if (!currentSession) return;
@@ -592,14 +618,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                 {/* 빙고판 */}
                 {currentSession.bingoCells.length > 0 && (
                   <div className="bg-white border-4 border-black p-4 shadow-hard">
-                    <h3 className="text-xl font-bold mb-4">빙고판</h3>
+                    <h3 className="text-xl font-bold mb-4">빙고판 <span className="text-sm font-normal text-gray-500">(클릭하여 문제 확인)</span></h3>
                     <BingoBoard
                       cells={currentSession.bingoCells}
                       cards={currentSession.bingoCards}
                       teams={currentSession.teams}
                       selectedCellIndex={gameState?.selectedCellIndex ?? null}
+                      onCellClick={handleViewCard}
                       onReplaceCard={handleReplaceCard}
                       isAdmin={true}
+                      isSelectable={true}
                       completedLines={gameState?.completedBingoLines.map((_, i) => i) || []}
                     />
                   </div>
@@ -754,6 +782,129 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
           </div>
         </div>
       </div>
+
+      {/* 카드 상세보기 모달 (관리자용) */}
+      {showCardModal && currentSession && selectedCardIndex !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-70">
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-2xl">
+            {/* 모달 헤더 */}
+            <div className="sticky top-0 z-10 flex items-center justify-between p-4 bg-white border-b">
+              <div>
+                <h2 className="text-xl font-black text-gray-800">
+                  {getSelectedCard()?.title || '카드 정보'}
+                </h2>
+                <span className="text-sm text-gray-500">
+                  {selectedCardIndex + 1}번 칸
+                </span>
+              </div>
+              <button
+                onClick={() => setShowCardModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* 상황 설명 */}
+              {getSelectedCard() && (
+                <>
+                  <div className="p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                    <h3 className="text-sm font-bold text-gray-500 mb-2">상황</h3>
+                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+                      {getSelectedCard()?.situation}
+                    </p>
+                  </div>
+
+                  {/* 선택지 */}
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-500 mb-3">선택지</h3>
+                    <div className="space-y-2">
+                      {getSelectedCard()?.choices.map((choice) => (
+                        <div
+                          key={choice.id}
+                          className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 font-bold text-sm">
+                              {choice.id}
+                            </span>
+                            <div className="flex-1">
+                              <span className="text-gray-800">{choice.text}</span>
+                              {choice.score && (
+                                <span className="ml-2 px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-700 rounded">
+                                  {choice.score}점
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 학습 포인트 */}
+                  {getSelectedCard()?.learningPoint && (
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="text-sm font-bold text-blue-600 mb-1">학습 포인트</h3>
+                      <p className="text-blue-800">{getSelectedCard()?.learningPoint}</p>
+                    </div>
+                  )}
+
+                  {/* 팀 답변 (있는 경우) */}
+                  {getSelectedCellAnswers().length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-500 mb-3">팀별 답변</h3>
+                      <div className="space-y-3">
+                        {getSelectedCellAnswers()
+                          .sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0))
+                          .map((answer, idx) => {
+                            const team = currentSession.teams.find(t => t.id === answer.teamId);
+                            const color = team ? TEAM_COLORS[team.colorIndex] : null;
+                            return (
+                              <div
+                                key={answer.teamId}
+                                className={`p-3 rounded-lg border ${idx === 0 ? 'bg-yellow-50 border-yellow-300' : 'bg-gray-50 border-gray-200'}`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    {idx === 0 && <span>🏆</span>}
+                                    <span
+                                      className="w-3 h-3 rounded-full"
+                                      style={{ backgroundColor: color?.bg }}
+                                    />
+                                    <span className="font-bold">{answer.teamName}</span>
+                                    <span className="text-sm text-gray-500">선택: {answer.choiceId}</span>
+                                  </div>
+                                  <span className={`font-black ${idx === 0 ? 'text-yellow-600' : 'text-gray-600'}`}>
+                                    {answer.aiScore}점
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 bg-white p-2 rounded border">
+                                  <strong>이유:</strong> {answer.reasoning}
+                                </p>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* 닫기 버튼 */}
+            <div className="sticky bottom-0 p-4 bg-white border-t">
+              <button
+                onClick={() => setShowCardModal(false)}
+                className="w-full py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-900"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
