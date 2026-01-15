@@ -120,7 +120,7 @@ function App() {
           <div className="inline-block p-4 bg-white rounded-2xl shadow-2xl mb-4">
             <div className="text-6xl">🎯</div>
           </div>
-          <h1 className="text-4xl font-black text-white mb-2">빙고 교육 게임</h1>
+          <h1 className="text-3xl font-black text-white mb-2">Workplace Scenario Bingo</h1>
           <p className="text-blue-200">팀 대항 상황 판단 학습</p>
         </div>
 

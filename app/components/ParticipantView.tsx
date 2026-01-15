@@ -144,7 +144,7 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white border-4 border-black p-6 shadow-hard">
-          <h1 className="text-2xl font-black text-center mb-6">빙고 게임 참여</h1>
+          <h1 className="text-2xl font-black text-center mb-6">Workplace Scenario Bingo</h1>
 
           <div className="mb-6">
             <p className="text-center text-gray-600 mb-2">세션: {session.name}</p>
