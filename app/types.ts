@@ -52,6 +52,7 @@ export interface Team {
 export interface Choice {
   id: string;
   text: string;
+  score?: number; // 선택지 기본 점수 (100, 90, 80 등)
 }
 
 // 상황 카드

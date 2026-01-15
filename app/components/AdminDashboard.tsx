@@ -369,6 +369,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
     });
   };
 
+  // 게임 종료
+  const handleEndGame = async () => {
+    if (!currentSession) return;
+    if (!confirm('정말 게임을 종료하시겠습니까?')) return;
+
+    await updateSession(currentSession.id, { status: 'ended' });
+    await updateGameState(currentSession.id, {
+      phase: GamePhase.GameEnded
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 p-4">
       <div className="max-w-7xl mx-auto">
@@ -529,16 +540,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                       )}
 
                       {currentSession.status === 'active' && (
-                        <button
-                          onClick={handleTogglePause}
-                          className="px-3 py-2 bg-yellow-400 font-bold border-2 border-black hover:bg-yellow-500 flex items-center gap-1"
-                        >
-                          {gameState?.phase === GamePhase.Paused ? (
-                            <><Play className="w-4 h-4" /> 재개</>
-                          ) : (
-                            <><Pause className="w-4 h-4" /> 일시정지</>
-                          )}
-                        </button>
+                        <>
+                          <button
+                            onClick={handleTogglePause}
+                            className="px-3 py-2 bg-yellow-400 font-bold border-2 border-black hover:bg-yellow-500 flex items-center gap-1"
+                          >
+                            {gameState?.phase === GamePhase.Paused ? (
+                              <><Play className="w-4 h-4" /> 재개</>
+                            ) : (
+                              <><Pause className="w-4 h-4" /> 일시정지</>
+                            )}
+                          </button>
+                          <button
+                            onClick={handleEndGame}
+                            className="px-3 py-2 bg-red-500 text-white font-bold border-2 border-black hover:bg-red-600 flex items-center gap-1"
+                          >
+                            <Trophy className="w-4 h-4" /> 게임 종료
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

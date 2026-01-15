@@ -15,11 +15,11 @@ interface GeminiResponse {
   }>;
 }
 
-// AI 평가 프롬프트 생성
-function createEvaluationPrompt(card: GameCard, answer: TeamAnswer): string {
+// AI 평가 프롬프트 생성 (이유 분석용)
+function createReasoningPrompt(card: GameCard, answer: TeamAnswer): string {
   const choiceText = card.choices.find(c => c.id === answer.choiceId)?.text || '';
 
-  return `당신은 기업 교육 전문가입니다. 다음 상황에 대한 참가자의 답변을 평가해주세요.
+  return `당신은 기업 교육 전문가입니다. 참가자가 작성한 '선택 이유'의 품질을 평가해주세요.
 
 ## 상황
 ${card.situation}
@@ -30,37 +30,47 @@ ${card.choices.map(c => `${c.id}. ${c.text}`).join('\n')}
 ## 참가자가 선택한 답변
 선택: ${answer.choiceId}. ${choiceText}
 
-## 선택 이유
+## 참가자가 작성한 선택 이유
 ${answer.reasoning}
 
-## 평가 기준
-1. 상황 이해도 (20점): 상황을 정확히 파악했는가?
-2. 논리적 근거 (30점): 선택의 이유가 논리적인가?
-3. 실무 적용 가능성 (25점): 실제 업무에서 적용 가능한 답변인가?
-4. 창의성 및 통찰력 (25점): 새로운 관점이나 깊은 통찰이 있는가?
+## 평가 기준 (가산점 0-100점)
+- 100점: 논리적이고 구체적이며, 상황 분석이 탁월함
+- 90점: 논리적이고 적절한 근거가 있음
+- 80점: 기본적인 논리는 있으나 구체성 부족
+- 70점: 단순한 이유만 제시
+- 60점 이하: 이유가 불충분하거나 상황과 맞지 않음
 
 ## 응답 형식 (반드시 다음 JSON 형식으로만 응답)
 {
-  "score": 0-100 사이의 숫자,
-  "feedback": "구체적이고 건설적인 피드백 (3-4문장)"
+  "reasoningScore": 60-100 사이의 숫자,
+  "feedback": "구체적이고 건설적인 피드백 (2-3문장)"
 }
 
-JSON만 응답하세요. 다른 텍스트는 포함하지 마세요.`;
+JSON만 응답하세요.`;
 }
 
-// AI 평가 실행
+// 선택지 기본 점수 가져오기 (score가 없으면 기본값 80)
+function getChoiceBaseScore(card: GameCard, choiceId: string): number {
+  const choice = card.choices.find(c => c.id === choiceId);
+  return choice?.score ?? 80;
+}
+
+// AI 평가 실행 (기본점수 + 이유 가산점)
 export async function evaluateAnswer(
   card: GameCard,
   answer: TeamAnswer
 ): Promise<AIEvaluationResult> {
+  // 선택지 기본 점수
+  const baseScore = getChoiceBaseScore(card, answer.choiceId);
+
   // API 키가 없으면 더미 결과 반환
   if (!GEMINI_API_KEY) {
     console.warn('Gemini API 키가 설정되지 않았습니다. 더미 결과를 반환합니다.');
-    return createDummyResult(answer.teamId);
+    return createDummyResult(answer.teamId, baseScore);
   }
 
   try {
-    const prompt = createEvaluationPrompt(card, answer);
+    const prompt = createReasoningPrompt(card, answer);
 
     const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
@@ -92,17 +102,21 @@ export async function evaluateAnswer(
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+    const reasoningScore = Math.min(100, Math.max(60, Number(parsed.reasoningScore) || 70));
+
+    // 최종 점수 = 선택지 점수 + 이유 가산점 (평균)
+    const finalScore = Math.round((baseScore + reasoningScore) / 2);
 
     return {
       teamId: answer.teamId,
-      score: Math.min(100, Math.max(0, Number(parsed.score) || 50)),
-      feedback: parsed.feedback || '평가를 완료했습니다.',
+      score: finalScore,
+      feedback: `[선택 ${baseScore}점 + 이유 ${reasoningScore}점] ${parsed.feedback || '평가를 완료했습니다.'}`,
       evaluatedAt: Date.now()
     };
 
   } catch (error) {
     console.error('AI 평가 오류:', error);
-    return createDummyResult(answer.teamId);
+    return createDummyResult(answer.teamId, baseScore);
   }
 }
 
@@ -118,18 +132,20 @@ export async function evaluateAllAnswers(
 }
 
 // 더미 결과 생성 (API 키가 없거나 오류 시)
-function createDummyResult(teamId: string): AIEvaluationResult {
-  const randomScore = Math.floor(Math.random() * 40) + 50; // 50-90점
+function createDummyResult(teamId: string, baseScore: number): AIEvaluationResult {
+  const reasoningScore = Math.floor(Math.random() * 30) + 70; // 70-100점
+  const finalScore = Math.round((baseScore + reasoningScore) / 2);
+
   const feedbacks = [
-    '상황을 잘 이해하고 적절한 선택을 했습니다. 다만, 더 구체적인 근거를 제시하면 좋겠습니다.',
-    '논리적인 접근이 돋보입니다. 실무 적용 시 고려해야 할 추가 사항들도 있습니다.',
-    '창의적인 관점이 있습니다. 조금 더 체계적인 분석이 추가되면 완벽할 것 같습니다.',
-    '실용적인 답변입니다. 팀워크와 커뮤니케이션 측면도 고려해보면 좋겠습니다.',
+    `[선택 ${baseScore}점 + 이유 ${reasoningScore}점] 상황을 잘 이해하고 적절한 선택을 했습니다. 이유도 논리적입니다.`,
+    `[선택 ${baseScore}점 + 이유 ${reasoningScore}점] 논리적인 접근이 돋보입니다. 좀 더 구체적인 근거가 있으면 좋겠습니다.`,
+    `[선택 ${baseScore}점 + 이유 ${reasoningScore}점] 창의적인 관점이 있습니다. 실무 적용 가능성도 고려해보세요.`,
+    `[선택 ${baseScore}점 + 이유 ${reasoningScore}점] 실용적인 답변입니다. 다양한 관점을 더 고려하면 좋겠습니다.`,
   ];
 
   return {
     teamId,
-    score: randomScore,
+    score: finalScore,
     feedback: feedbacks[Math.floor(Math.random() * feedbacks.length)],
     evaluatedAt: Date.now()
   };
