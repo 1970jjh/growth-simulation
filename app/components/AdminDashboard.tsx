@@ -85,60 +85,55 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
 
   // 새 세션 생성
   const handleCreateSession = async () => {
-    if (!newSessionName.trim()) {
-      alert('세션 이름을 입력해주세요.');
-      return;
-    }
+    if (!newSessionName.trim()) return;
 
     setIsCreating(true);
+
+    const sessionId = generateId('sess');
+    const accessCode = generateAccessCode();
+
+    // 팀 생성
+    const teams: Team[] = [];
+    for (let i = 0; i < newTeamCount; i++) {
+      teams.push({
+        id: generateId('team'),
+        name: `${i + 1}팀`,
+        colorIndex: (i % 8) as TeamColorIndex,
+        members: [],
+        totalScore: 0,
+        bingoCount: 0,
+        ownedCells: []
+      });
+    }
+
+    const newSession: Session = {
+      id: sessionId,
+      name: newSessionName.trim(),
+      status: 'waiting',
+      accessCode,
+      createdAt: Date.now(),
+      settings: {
+        ...DEFAULT_SESSION_SETTINGS,
+        bingoLinesToWin: newBingoLines,
+        maxTeams: newTeamCount,
+        isActive: true
+      },
+      teams,
+      allCards: [],
+      bingoCards: [],
+      spareCards: [],
+      bingoCells: []
+    };
+
     try {
-      const sessionId = generateId('sess');
-      const accessCode = generateAccessCode();
-
-      // 팀 생성
-      const teams: Team[] = [];
-      for (let i = 0; i < newTeamCount; i++) {
-        teams.push({
-          id: generateId('team'),
-          name: `${i + 1}팀`,
-          colorIndex: (i % 8) as TeamColorIndex,
-          members: [],
-          totalScore: 0,
-          bingoCount: 0,
-          ownedCells: []
-        });
-      }
-
-      const newSession: Session = {
-        id: sessionId,
-        name: newSessionName.trim(),
-        status: 'waiting',
-        accessCode,
-        createdAt: Date.now(),
-        settings: {
-          ...DEFAULT_SESSION_SETTINGS,
-          bingoLinesToWin: newBingoLines,
-          maxTeams: newTeamCount
-        },
-        teams,
-        allCards: [],
-        bingoCards: [],
-        spareCards: [],
-        bingoCells: []
-      };
-
       await createSession(newSession);
       await initGameState(sessionId);
-
       setNewSessionName('');
-      onSessionsChange();
-      alert('세션이 생성되었습니다!');
     } catch (error) {
       console.error('세션 생성 오류:', error);
-      alert('세션 생성에 실패했습니다.');
-    } finally {
-      setIsCreating(false);
     }
+
+    setIsCreating(false);
   };
 
   // 세션 삭제
