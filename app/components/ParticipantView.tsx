@@ -333,15 +333,18 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
                 AI 분석 결과
               </h3>
 
-              {/* 내 팀 결과 */}
-              <div className="bg-white p-4 rounded-lg mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold">{myTeam?.name}</span>
-                  <span className="text-2xl font-black text-purple-600">
-                    {myAnswer.aiScore}점
-                  </span>
-                </div>
-                <p className="text-gray-700 text-sm">{myAnswer.aiFeedback}</p>
+              {/* 내 팀 결과 - 점수만 표시 */}
+              <div className="bg-white p-4 rounded-lg mb-4 text-center">
+                <p className="text-sm text-gray-500 mb-1">{myTeam?.name}</p>
+                <p className="text-4xl font-black text-purple-600 mb-2">
+                  {myAnswer.aiScore}점
+                </p>
+                <button
+                  onClick={() => setShowCardModal(true)}
+                  className="text-sm text-purple-600 underline hover:text-purple-800"
+                >
+                  상세 분석 보기
+                </button>
               </div>
 
               {/* 전체 순위 */}
