@@ -50,6 +50,12 @@ const BingoBoard: React.FC<BingoBoardProps> = ({
     const cell = cells[cellIndex];
     if (!cell) return;
 
+    // 관리자는 모든 셀 클릭 가능
+    if (isAdmin && onCellClick) {
+      onCellClick(cellIndex);
+      return;
+    }
+
     // 이미 완료된 칸이면 클릭 불가
     if (cell.isCompleted) return;
 

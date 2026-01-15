@@ -72,6 +72,18 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
   // 내 팀의 답변
   const myAnswer = gameState?.teamAnswers.find(a => a.teamId === selectedTeamId);
 
+  // 답변 단계가 되면 자동으로 팝업 열기
+  useEffect(() => {
+    if (
+      gameState?.phase === GamePhase.AllTeamsAnswering &&
+      gameState?.currentCard &&
+      !myAnswer &&
+      isJoined
+    ) {
+      setShowCardModal(true);
+    }
+  }, [gameState?.phase, gameState?.currentCard?.id, myAnswer, isJoined]);
+
   // 팀 참여 핸들러
   const handleJoinTeam = async () => {
     if (!selectedTeamId || !playerName.trim()) {
@@ -113,6 +125,9 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
       phase: GamePhase.AllTeamsAnswering,
       teamAnswers: []
     });
+
+    // 셀 선택 후 자동으로 문제 팝업 열기
+    setShowCardModal(true);
   };
 
   // 답변 제출
