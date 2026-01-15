@@ -125,9 +125,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
       bingoCells: []
     };
 
+    // 타임아웃 설정 (10초)
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), 10000)
+    );
+
     try {
-      await createSession(newSession);
-      await initGameState(sessionId);
+      await Promise.race([
+        (async () => {
+          await createSession(newSession);
+          await initGameState(sessionId);
+        })(),
+        timeout
+      ]);
       setNewSessionName('');
     } catch (error) {
       console.error('세션 생성 오류:', error);
