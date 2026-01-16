@@ -251,7 +251,7 @@ const CardModal: React.FC<CardModalProps> = ({
             </div>
           )}
 
-          {/* AI 결과 표시 - 새로운 형식 */}
+          {/* AI 결과 표시 - 간소화된 형식 (총평 + 모범답안) */}
           {showResults && existingAnswer?.aiScore !== undefined && parsedFeedback && (
             <div className="p-4 bg-white rounded-lg border-2 border-gray-200">
               <div className="flex items-center gap-2 mb-4">
@@ -261,48 +261,28 @@ const CardModal: React.FC<CardModalProps> = ({
                 </h3>
               </div>
 
-              {/* 장점 */}
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 text-sm font-bold text-orange-600 bg-orange-100 rounded border border-orange-300 mb-2">
-                  장점
-                </span>
-                <p className="text-gray-700 leading-relaxed">
-                  {parsedFeedback.strength || '분석 중...'}
-                </p>
-              </div>
-
-              {/* 리스크 */}
-              <div className="mb-4">
-                <span className="inline-block px-3 py-1 text-sm font-bold text-red-600 bg-red-100 rounded border border-red-300 mb-2">
-                  리스크
-                </span>
-                <p className="text-gray-700 leading-relaxed">
-                  {parsedFeedback.risk || '분석 중...'}
-                </p>
-              </div>
-
               {/* 총평 */}
               <div className="mb-4">
                 <span className="inline-block px-3 py-1 text-sm font-bold text-blue-600 bg-blue-100 rounded border border-blue-300 mb-2">
                   총평
                 </span>
-                <p className="text-gray-700 leading-relaxed">
+                <p className="text-base text-gray-700 leading-relaxed">
                   {parsedFeedback.summary || '분석 중...'}
                 </p>
               </div>
 
               {/* 모범답안 */}
-              <div className="mb-4">
+              <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200">
                 <span className="inline-block px-3 py-1 text-sm font-bold text-green-600 bg-green-100 rounded border border-green-300 mb-2">
                   모범답안
                 </span>
-                <p className="text-gray-700 leading-relaxed">
+                <p className="text-base text-green-800 leading-relaxed">
                   {parsedFeedback.modelAnswer || '분석 중...'}
                 </p>
               </div>
 
               {/* 5가지 지표 */}
-              <div className="grid grid-cols-5 gap-2 mt-4 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-5 gap-2 pt-4 border-t border-gray-200">
                 {[
                   { key: 'resource', label: 'RESOURCE', value: parsedFeedback.metrics.resource },
                   { key: 'energy', label: 'ENERGY', value: parsedFeedback.metrics.energy },
