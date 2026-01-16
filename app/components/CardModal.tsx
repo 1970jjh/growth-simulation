@@ -15,11 +15,12 @@ interface CardModalProps {
   allAnswers?: TeamAnswer[];
 }
 
-// AI 피드백 파싱 함수
+// AI 피드백 파싱 함수 (새 형식 지원: 상황분석/선택평가/이유평가)
 function parseAIFeedback(feedback: string) {
   const result = {
-    strength: '',
-    risk: '',
+    situationAnalysis: '',
+    choiceEvaluation: '',
+    reasoningEvaluation: '',
     summary: '',
     modelAnswer: '',
     metrics: {
@@ -36,13 +37,17 @@ function parseAIFeedback(feedback: string) {
     }
   };
 
-  // 장점 파싱
-  const strengthMatch = feedback.match(/\[장점\]\n?([\s\S]*?)(?=\[리스크\]|$)/);
-  if (strengthMatch) result.strength = strengthMatch[1].trim();
+  // 상황분석 파싱 (새 형식)
+  const situationMatch = feedback.match(/\[상황분석\]\n?([\s\S]*?)(?=\[선택평가\]|\[장점\]|$)/);
+  if (situationMatch) result.situationAnalysis = situationMatch[1].trim();
 
-  // 리스크 파싱
-  const riskMatch = feedback.match(/\[리스크\]\n?([\s\S]*?)(?=\[총평\]|$)/);
-  if (riskMatch) result.risk = riskMatch[1].trim();
+  // 선택평가 파싱 (새 형식)
+  const choiceEvalMatch = feedback.match(/\[선택평가\]\n?([\s\S]*?)(?=\[이유평가\]|\[리스크\]|$)/);
+  if (choiceEvalMatch) result.choiceEvaluation = choiceEvalMatch[1].trim();
+
+  // 이유평가 파싱 (새 형식)
+  const reasoningEvalMatch = feedback.match(/\[이유평가\]\n?([\s\S]*?)(?=\[총평\]|$)/);
+  if (reasoningEvalMatch) result.reasoningEvaluation = reasoningEvalMatch[1].trim();
 
   // 총평 파싱
   const summaryMatch = feedback.match(/\[총평\]\n?([\s\S]*?)(?=\[모범답안\]|$)/);
