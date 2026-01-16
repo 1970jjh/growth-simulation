@@ -3,7 +3,7 @@ import { GameCard, TeamAnswer, AIEvaluationResult } from '../types';
 
 // Gemini API 키 (실제 배포 시에는 환경변수로 관리)
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
 
 interface GeminiResponse {
   candidates: Array<{
@@ -82,10 +82,15 @@ export async function evaluateAnswer(
     return createDummyResult(answer.teamId, baseScore, answer.choiceId, card);
   }
 
+  console.log('AI 평가 시작 - API 키 존재:', !!GEMINI_API_KEY);
+
   try {
     const prompt = createReasoningPrompt(card, answer);
+    const apiUrl = `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`;
 
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    console.log('API 호출 URL:', GEMINI_API_URL);
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -101,7 +106,11 @@ export async function evaluateAnswer(
       })
     });
 
+    console.log('API 응답 상태:', response.status);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API 오류 응답:', errorText);
       throw new Error(`API 오류: ${response.status}`);
     }
 

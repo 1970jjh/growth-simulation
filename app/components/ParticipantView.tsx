@@ -125,9 +125,7 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
       phase: GamePhase.AllTeamsAnswering,
       teamAnswers: []
     });
-
-    // 셀 선택 후 자동으로 문제 팝업 열기
-    setShowCardModal(true);
+    // 팝업은 useEffect에서 gameState 업데이트 감지 후 자동으로 열림
   };
 
   // 답변 제출
