@@ -15,6 +15,8 @@ interface BingoBoardProps {
   completedLines?: number[];  // 완성된 라인 인덱스들
 }
 
+const CENTER_CELL_INDEX = 12; // 가운데 칸 (조커)
+
 const BingoBoard: React.FC<BingoBoardProps> = ({
   cells,
   cards,
@@ -76,6 +78,7 @@ const BingoBoard: React.FC<BingoBoardProps> = ({
           const isSelected = selectedCellIndex === index;
           const isCompleted = cell.isCompleted;
           const inCompletedLine = isInCompletedLine(index);
+          const isJokerCell = index === CENTER_CELL_INDEX;
 
           return (
             <div
@@ -102,18 +105,32 @@ const BingoBoard: React.FC<BingoBoardProps> = ({
                 className={`
                   absolute inset-0 flex flex-col items-center justify-center p-1 md:p-2
                   ${isCompleted ? 'bg-opacity-90' : 'bg-gray-700'}
+                  ${isJokerCell && !isCompleted ? 'bg-gradient-to-br from-purple-600 to-pink-500' : ''}
                 `}
                 style={{
                   backgroundColor: teamColor ? teamColor.bg : undefined,
                   color: teamColor ? teamColor.text : '#FFFFFF'
                 }}
               >
+                {/* 조커 표시 */}
+                {isJokerCell && (
+                  <span className="absolute top-0.5 right-0.5 md:top-1 md:right-1 text-[8px] md:text-xs">
+                    🃏
+                  </span>
+                )}
                 <span className={`
                   text-[10px] md:text-xs font-bold text-center leading-tight
                   ${isCompleted ? '' : 'text-white'}
                 `}>
                   {card?.title || `카드 ${index + 1}`}
                 </span>
+
+                {/* 조커 라벨 (미점령 시) */}
+                {isJokerCell && !isCompleted && (
+                  <span className="mt-0.5 text-[8px] md:text-[10px] font-black text-yellow-300">
+                    JOKER
+                  </span>
+                )}
 
                 {/* 팀 이름 표시 (완료된 칸) */}
                 {ownerTeam && (
