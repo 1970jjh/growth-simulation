@@ -686,26 +686,82 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                       {/* 결과 표시 */}
                       {gameState.phase === GamePhase.ShowingResults && (
                         <div>
-                          <p className="font-bold mb-2">라운드 결과</p>
-                          <div className="space-y-2">
+                          {/* 모범 답안 (공통) - 첫 번째 답변에서 추출 */}
+                          {gameState.teamAnswers[0]?.aiFeedback && (() => {
+                            const feedback = gameState.teamAnswers[0].aiFeedback;
+                            const modelMatch = feedback.match(/\[모범답안\]\n?([\s\S]*?)(?=\[METRICS\]|$)/);
+                            const modelAnswer = modelMatch ? modelMatch[1].trim() : '';
+                            return modelAnswer ? (
+                              <div className="mb-6 p-4 bg-green-50 border-2 border-green-400 rounded-lg">
+                                <h4 className="text-lg font-black text-green-700 mb-2">📝 모범 답안</h4>
+                                <p className="text-lg text-green-800 leading-relaxed">{modelAnswer}</p>
+                              </div>
+                            ) : null;
+                          })()}
+
+                          <p className="font-bold mb-3 text-lg">팀별 결과</p>
+                          <div className="space-y-4">
                             {[...gameState.teamAnswers]
                               .sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0))
-                              .map((answer, idx) => (
-                                <div
-                                  key={answer.teamId}
-                                  className={`p-3 rounded border ${
-                                    idx === 0 ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50'
-                                  }`}
-                                >
-                                  <div className="flex justify-between">
-                                    <span className="font-bold">
-                                      {idx === 0 && '🏆 '}{answer.teamName}
-                                    </span>
-                                    <span className="font-black">{answer.aiScore}점</span>
+                              .map((answer, idx) => {
+                                // 피드백 파싱
+                                const feedback = answer.aiFeedback || '';
+                                const summaryMatch = feedback.match(/\[총평\]\n?([\s\S]*?)(?=\[모범답안\]|$)/);
+                                const summary = summaryMatch ? summaryMatch[1].trim() : '';
+
+                                // 메트릭 파싱
+                                const metricsMatch = feedback.match(/\[METRICS\]\n?([\s\S]*?)(?=\[SCORES\]|$)/);
+                                let metrics = { resource: 0, energy: 0, trust: 0, competency: 0, insight: 0 };
+                                if (metricsMatch) {
+                                  const parts = metricsMatch[1].trim().split('|');
+                                  parts.forEach(part => {
+                                    const [key, value] = part.split(':');
+                                    if (key && value) {
+                                      const k = key.toLowerCase().trim();
+                                      if (k in metrics) (metrics as any)[k] = parseInt(value, 10);
+                                    }
+                                  });
+                                }
+
+                                return (
+                                  <div
+                                    key={answer.teamId}
+                                    className={`p-4 rounded-lg border-2 ${
+                                      idx === 0 ? 'bg-yellow-50 border-yellow-400' : 'bg-gray-50 border-gray-300'
+                                    }`}
+                                  >
+                                    <div className="flex justify-between items-center mb-3">
+                                      <span className="text-xl font-black">
+                                        {idx === 0 && '🏆 '}{answer.teamName}
+                                      </span>
+                                      <span className="text-2xl font-black text-purple-600">{answer.aiScore}점</span>
+                                    </div>
+
+                                    {/* 총평 */}
+                                    <p className="text-base text-gray-700 mb-4 line-clamp-2">{summary}</p>
+
+                                    {/* 5개 지표 */}
+                                    <div className="grid grid-cols-5 gap-2">
+                                      {[
+                                        { key: 'resource', label: 'RESOURCE', value: metrics.resource },
+                                        { key: 'energy', label: 'ENERGY', value: metrics.energy },
+                                        { key: 'trust', label: 'TRUST', value: metrics.trust },
+                                        { key: 'competency', label: 'COMPETENCY', value: metrics.competency },
+                                        { key: 'insight', label: 'INSIGHT', value: metrics.insight },
+                                      ].map((m) => (
+                                        <div key={m.key} className="text-center p-2 bg-white rounded border">
+                                          <p className="text-[10px] font-bold text-gray-500">{m.label}</p>
+                                          <p className={`text-lg font-black ${
+                                            m.value > 0 ? 'text-green-600' : m.value < 0 ? 'text-red-600' : 'text-gray-600'
+                                          }`}>
+                                            {m.value > 0 ? `+${m.value}` : m.value}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
-                                  <p className="text-sm text-gray-600 mt-1">{answer.aiFeedback}</p>
-                                </div>
-                              ))}
+                                );
+                              })}
                           </div>
 
                           <button
