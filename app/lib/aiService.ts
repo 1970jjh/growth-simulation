@@ -15,51 +15,83 @@ interface GeminiResponse {
   }>;
 }
 
-// AI 평가 프롬프트 생성 (새로운 형식: 장점/리스크/총평/모범답안 + 5가지 지표)
+// AI 평가 프롬프트 생성 (개선된 버전: 상황 맞춤 분석 + 공정한 점수 부여)
 function createReasoningPrompt(card: GameCard, answer: TeamAnswer): string {
-  const choiceText = card.choices.find(c => c.id === answer.choiceId)?.text || '';
+  const selectedChoice = card.choices.find(c => c.id === answer.choiceId);
+  const choiceText = selectedChoice?.text || '';
+  const choiceBaseScore = selectedChoice?.score ?? 80;
 
-  return `당신은 기업 교육 전문가입니다. 직장 내 상황에 대한 참가자의 답변을 분석해주세요.
+  // 선택지별 점수 정보 포함
+  const choicesWithScores = card.choices.map(c =>
+    `${c.id}. ${c.text}${c.score ? ` [기본점수: ${c.score}점]` : ''}`
+  ).join('\n');
 
-## 상황
+  return `당신은 기업 교육 전문가이자 공정한 평가자입니다.
+주어진 직장 상황에 대해 참가자의 선택과 그 이유를 심층 분석하여 점수를 부여해야 합니다.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 상황 설명
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${card.situation}
 
-## 선택지
-${card.choices.map(c => `${c.id}. ${c.text}`).join('\n')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔢 선택지 (기본점수는 해당 선택의 적절성을 반영)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${choicesWithScores}
 
-## 참가자가 선택한 답변
-선택: ${answer.choiceId}. ${choiceText}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ 참가자의 선택
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+선택한 답: ${answer.choiceId}. ${choiceText}
+선택지 기본 점수: ${choiceBaseScore}점
 
-## 참가자가 작성한 선택 이유
-${answer.reasoning}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💭 참가자가 작성한 선택 이유
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"${answer.reasoning}"
 
-## 평가 요청
-참가자의 답변을 분석하여 다음 JSON 형식으로 응답해주세요:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 평가 기준
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**이유 점수 (reasoningScore) 부여 기준:**
+- 90-100점: 상황을 정확히 이해하고, 선택의 장단점을 깊이있게 분석함. 구체적인 근거와 실행 방안 제시
+- 80-89점: 상황을 잘 이해하고 합리적인 이유를 제시함. 다소 일반적이지만 타당함
+- 70-79점: 기본적인 이해는 있으나 분석이 피상적임. 더 깊은 고찰 필요
+- 60-69점: 상황 이해가 부족하거나, 이유가 선택과 잘 맞지 않음. 논리적 연결 부족
+
+**중요: 이유의 질이 좋으면 선택이 차선책이더라도 높은 이유점수를, 이유가 부실하면 최적 선택이라도 낮은 이유점수를 부여하세요.**
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 응답 형식 (JSON)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+다음 JSON 형식으로만 응답하세요:
 
 {
-  "reasoningScore": 60-100 사이의 점수,
-  "strength": "장점 (이 선택의 좋은 점을 2-3문장으로 설명)",
-  "risk": "리스크 (이 선택의 잠재적 위험이나 단점을 2-3문장으로 설명)",
-  "summary": "총평 (전체적인 평가와 조언을 2-3문장으로)",
-  "modelAnswer": "모범답안 (이 상황에서 가장 이상적인 대응 방법을 구체적으로 2-3문장으로)",
+  "situationAnalysis": "이 상황에서 핵심적으로 고려해야 할 점이 무엇인지 1-2문장으로 설명",
+  "choiceEvaluation": "참가자가 선택한 답변이 이 상황에 얼마나 적절한지 1-2문장으로 평가",
+  "reasoningEvaluation": "참가자가 작성한 이유가 얼마나 논리적이고 깊이있는지 1-2문장으로 평가",
+  "reasoningScore": 60-100 사이의 정수 (위의 기준에 따라 부여),
+  "summary": "이 참가자에게 해주고 싶은 총평 (상황과 선택에 맞춤으로 2-3문장)",
+  "modelAnswer": "이 상황에서 가장 이상적인 대응과 그 이유를 구체적으로 2-3문장으로",
   "metrics": {
-    "resource": -5에서 +5 사이 정수 (업무 자원/시간 효율성),
-    "energy": -5에서 +5 사이 정수 (개인 에너지/스트레스 영향),
-    "trust": -5에서 +5 사이 정수 (신뢰/평판 영향),
-    "competency": -5에서 +5 사이 정수 (역량 발휘/성장),
-    "insight": -5에서 +5 사이 정수 (상황 통찰력/판단력)
+    "resource": -5에서 +5 사이 정수,
+    "energy": -5에서 +5 사이 정수,
+    "trust": -5에서 +5 사이 정수,
+    "competency": -5에서 +5 사이 정수,
+    "insight": -5에서 +5 사이 정수
   }
 }
 
-## 지표 설명
-- resource: 이 선택이 업무 자원(시간, 비용 등)에 미치는 영향
-- energy: 이 선택이 개인의 에너지와 스트레스에 미치는 영향
-- trust: 이 선택이 조직 내 신뢰와 평판에 미치는 영향
-- competency: 이 선택이 보여주는 역량과 성장 가능성
-- insight: 이 선택이 보여주는 상황 파악력과 판단력
+**지표 설명:**
+- resource: 업무 자원(시간, 비용 등)에 미치는 영향
+- energy: 개인 에너지/스트레스에 미치는 영향
+- trust: 조직 내 신뢰/평판에 미치는 영향
+- competency: 역량 발휘/성장 가능성
+- insight: 상황 파악력/판단력
 
-참가자의 선택 이유도 고려하여 평가해주세요.
-JSON만 응답하세요.`;
+JSON만 응답하세요. 다른 텍스트는 포함하지 마세요.`;
 }
 
 // 선택지 기본 점수 가져오기 (score가 없으면 기본값 80)
@@ -137,12 +169,19 @@ export async function evaluateAnswer(
     const competency = Math.min(5, Math.max(-5, Number(metrics.competency) || 0));
     const insight = Math.min(5, Math.max(-5, Number(metrics.insight) || 0));
 
-    // 새로운 형식의 상세 피드백 구성
-    const detailedFeedback = `[장점]
-${parsed.strength || '상황에 맞는 합리적인 선택입니다.'}
+    // 새로운 형식의 상세 피드백 구성 (상황 맞춤 분석 포함)
+    const situationAnalysis = parsed.situationAnalysis || '';
+    const choiceEvaluation = parsed.choiceEvaluation || '';
+    const reasoningEvaluation = parsed.reasoningEvaluation || '';
 
-[리스크]
-${parsed.risk || '특별한 리스크는 없습니다.'}
+    const detailedFeedback = `[상황분석]
+${situationAnalysis}
+
+[선택평가]
+${choiceEvaluation}
+
+[이유평가]
+${reasoningEvaluation}
 
 [총평]
 ${parsed.summary || '전반적으로 적절한 대응입니다.'}
