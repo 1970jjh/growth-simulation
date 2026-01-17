@@ -46,7 +46,9 @@ import {
   Image,
   Edit3,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Download,
+  X
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -84,6 +86,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
   const [isEditingSession, setIsEditingSession] = useState(false);
   const [editSessionName, setEditSessionName] = useState('');
   const [editTeamCount, setEditTeamCount] = useState(4);
+
+  // 게임 종료 팝업
+  const [showEndGameModal, setShowEndGameModal] = useState(false);
 
   // 세션 실시간 구독
   useEffect(() => {
@@ -534,6 +539,113 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
     await updateGameState(currentSession.id, {
       phase: GamePhase.GameEnded
     });
+
+    // 종료 팝업 표시
+    setShowEndGameModal(true);
+  };
+
+  // PDF 다운로드 (전체 결과)
+  const handleDownloadPDF = () => {
+    if (!currentSession || !gameState) return;
+
+    // PDF 내용 생성
+    const rankings = getTeamRankings();
+    let pdfContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${currentSession.name} - 게임 결과 리포트</title>
+  <style>
+    body { font-family: 'Malgun Gothic', sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+    h1 { color: #1f2937; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; }
+    h2 { color: #374151; margin-top: 30px; border-left: 4px solid #3b82f6; padding-left: 10px; }
+    h3 { color: #4b5563; }
+    .ranking { background: #fef3c7; padding: 20px; border-radius: 10px; margin: 20px 0; }
+    .ranking-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #e5e7eb; }
+    .ranking-item:last-child { border-bottom: none; }
+    .team-section { background: #f3f4f6; padding: 20px; border-radius: 10px; margin: 20px 0; page-break-inside: avoid; }
+    .round-result { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border: 1px solid #e5e7eb; }
+    .score { color: #7c3aed; font-weight: bold; font-size: 1.2em; }
+    .feedback { background: #eff6ff; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 0.9em; }
+    .model-answer { background: #ecfdf5; padding: 10px; border-radius: 5px; margin-top: 10px; }
+    @media print { body { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <h1>📊 ${currentSession.name}</h1>
+  <p>게임 종료 시간: ${new Date().toLocaleString('ko-KR')}</p>
+  <p>총 ${currentSession.teams.length}개 팀 참가 | 총 ${gameState.roundResults.length}라운드 진행</p>
+
+  <h2>🏆 최종 순위</h2>
+  <div class="ranking">
+    ${rankings.map((team, idx) => `
+      <div class="ranking-item">
+        <span>${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : (idx + 1) + '위'} ${team.name}</span>
+        <span class="score">${team.calculatedScore}점 ${team.bingoCount > 0 ? `(빙고 ${team.bingoCount}줄)` : ''}</span>
+      </div>
+    `).join('')}
+  </div>
+
+  <h2>📝 라운드별 상세 결과</h2>
+  ${gameState.roundResults.map((result, roundIdx) => {
+    const card = currentSession.bingoCards.find(c => c.id === result.cardId);
+    return `
+      <div class="team-section">
+        <h3>라운드 ${roundIdx + 1}: ${result.cardTitle}</h3>
+        <p><strong>상황:</strong> ${card?.situation || ''}</p>
+        <p><strong>선택지:</strong></p>
+        <ul>
+          ${card?.choices.map(c => `<li>${c.id}. ${c.text} ${c.score ? `(${c.score}점)` : ''}</li>`).join('') || ''}
+        </ul>
+
+        <h4>팀별 답변 및 AI 분석</h4>
+        ${result.allAnswers.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0)).map((answer, ansIdx) => {
+          const feedbackSummary = answer.aiFeedback?.match(/\[총평\]\n?([\s\S]*?)(?=\[모범답안\]|$)/)?.[1]?.trim() || '';
+          const modelAnswer = answer.aiFeedback?.match(/\[모범답안\]\n?([\s\S]*?)(?=\[METRICS\]|$)/)?.[1]?.trim() || '';
+          return `
+            <div class="round-result">
+              <p><strong>${ansIdx === 0 ? '🏆 ' : ''}${answer.teamName}</strong> - 선택: ${answer.choiceId} | <span class="score">${answer.aiScore || 0}점</span></p>
+              <p><strong>선택 이유:</strong> ${answer.reasoning}</p>
+              ${feedbackSummary ? `<div class="feedback"><strong>AI 총평:</strong> ${feedbackSummary}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+
+        ${(() => {
+          const firstAnswer = result.allAnswers[0];
+          const modelAnswer = firstAnswer?.aiFeedback?.match(/\[모범답안\]\n?([\s\S]*?)(?=\[METRICS\]|$)/)?.[1]?.trim() || '';
+          return modelAnswer ? `<div class="model-answer"><strong>📝 모범 답안:</strong> ${modelAnswer}</div>` : '';
+        })()}
+      </div>
+    `;
+  }).join('')}
+
+  <h2>📈 팀별 성과 요약</h2>
+  ${rankings.map(team => `
+    <div class="team-section">
+      <h3>${team.name}</h3>
+      <p>최종 점수: <span class="score">${team.calculatedScore}점</span></p>
+      <p>획득 칸: ${team.ownedCells.length}개 | 빙고: ${team.bingoCount}줄 ${team.bingoCount > 0 ? `(+${team.bingoCount * 500}점)` : ''}</p>
+      <p>참가자 수: ${team.members.length}명</p>
+    </div>
+  `).join('')}
+
+  <footer style="margin-top: 40px; text-align: center; color: #9ca3af; font-size: 0.8em;">
+    Workplace Scenario Bingo - 게임 결과 리포트
+  </footer>
+</body>
+</html>`;
+
+    // PDF 다운로드 (HTML을 새 창에서 인쇄)
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(pdfContent);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
   };
 
   return (
@@ -700,9 +812,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
 
               {/* 3단 레이아웃: 이미지 | 빙고판 | 실시간 순위 */}
               {currentSession.bingoCells.length > 0 && (
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-                  {/* 왼쪽: 이미지 업로드 영역 */}
-                  <div className="lg:col-span-1">
+                <div className="grid grid-cols-1 lg:grid-cols-6 gap-4">
+                  {/* 왼쪽: 이미지 업로드 영역 (2배 너비) */}
+                  <div className="lg:col-span-2">
                     <div className="bg-white border-4 border-black p-4 shadow-hard h-full">
                       <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
                         <Image className="w-5 h-5" /> 상황 이미지
@@ -715,41 +827,44 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                         className="hidden"
                       />
                       {uploadedImage ? (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <img
                             src={uploadedImage}
                             alt="업로드된 이미지"
-                            className="w-full rounded-lg border-2 border-gray-300 object-cover"
-                            style={{ maxHeight: '300px' }}
+                            className="w-full rounded-lg border-2 border-gray-300 object-contain"
+                            style={{ minHeight: '400px', maxHeight: '600px' }}
                           />
-                          <button
-                            onClick={() => imageInputRef.current?.click()}
-                            className="w-full py-2 bg-gray-200 font-bold border-2 border-black hover:bg-gray-300 text-sm"
-                          >
-                            이미지 변경
-                          </button>
-                          <button
-                            onClick={() => setUploadedImage(null)}
-                            className="w-full py-2 bg-red-100 font-bold border-2 border-red-300 hover:bg-red-200 text-red-600 text-sm"
-                          >
-                            이미지 삭제
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => imageInputRef.current?.click()}
+                              className="flex-1 py-2 bg-gray-200 font-bold border-2 border-black hover:bg-gray-300 text-sm"
+                            >
+                              이미지 변경
+                            </button>
+                            <button
+                              onClick={() => setUploadedImage(null)}
+                              className="flex-1 py-2 bg-red-100 font-bold border-2 border-red-300 hover:bg-red-200 text-red-600 text-sm"
+                            >
+                              삭제
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div
                           onClick={() => imageInputRef.current?.click()}
-                          className="border-4 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                          className="border-4 border-dashed border-gray-300 rounded-lg p-12 text-center cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                          style={{ minHeight: '400px' }}
                         >
-                          <Image className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-500 font-bold">클릭하여 이미지 업로드</p>
-                          <p className="text-gray-400 text-sm mt-1">상황 설명 이미지</p>
+                          <Image className="w-20 h-20 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-500 font-bold text-lg">클릭하여 이미지 업로드</p>
+                          <p className="text-gray-400 text-sm mt-2">상황 설명 이미지를 업로드하세요</p>
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* 가운데: 빙고판 */}
-                  <div className="lg:col-span-2">
+                  <div className="lg:col-span-3">
                     <div className="bg-white border-4 border-black p-4 shadow-hard">
                       <h3 className="text-xl font-bold mb-4">
                         빙고판
@@ -1212,6 +1327,105 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
               >
                 닫기
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 게임 종료 팝업 */}
+      {showEndGameModal && currentSession && gameState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-80">
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
+            {/* 헤더 */}
+            <div className="sticky top-0 z-10 bg-gradient-to-r from-yellow-400 to-orange-500 p-6 rounded-t-2xl">
+              <button
+                onClick={() => setShowEndGameModal(false)}
+                className="absolute top-4 right-4 p-2 bg-white bg-opacity-20 hover:bg-opacity-40 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+              <div className="text-center">
+                <Trophy className="w-20 h-20 text-white mx-auto mb-4 animate-bounce" />
+                <h2 className="text-3xl font-black text-white">게임 종료!</h2>
+                <p className="text-white text-opacity-90 mt-2">{currentSession.name}</p>
+              </div>
+            </div>
+
+            {/* 최종 순위 */}
+            <div className="p-6">
+              <h3 className="text-2xl font-black text-gray-800 mb-6 text-center">🏆 최종 순위</h3>
+
+              <div className="space-y-4">
+                {getTeamRankings().map((team, idx) => {
+                  const color = TEAM_COLORS[team.colorIndex];
+                  const isWinner = idx === 0;
+                  return (
+                    <div
+                      key={team.id}
+                      className={`
+                        p-5 rounded-xl border-4 flex items-center justify-between
+                        ${isWinner ? 'bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-400 shadow-lg' : 'bg-gray-50 border-gray-200'}
+                      `}
+                    >
+                      <div className="flex items-center gap-4">
+                        <span className="text-4xl">
+                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}위`}
+                        </span>
+                        <div
+                          className="w-6 h-6 rounded-full"
+                          style={{ backgroundColor: color.bg }}
+                        />
+                        <span className={`text-2xl font-black ${isWinner ? 'text-yellow-700' : 'text-gray-700'}`}>
+                          {team.name}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-3xl font-black ${isWinner ? 'text-yellow-600' : 'text-purple-600'}`}>
+                          {team.calculatedScore}점
+                        </span>
+                        {team.bingoCount > 0 && (
+                          <p className="text-sm text-gray-500">빙고 {team.bingoCount}줄 (+{team.bingoCount * 500})</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 통계 */}
+              <div className="mt-8 grid grid-cols-3 gap-4 text-center">
+                <div className="p-4 bg-blue-50 rounded-xl">
+                  <p className="text-3xl font-black text-blue-600">{gameState.roundResults.length}</p>
+                  <p className="text-sm text-blue-700">총 라운드</p>
+                </div>
+                <div className="p-4 bg-green-50 rounded-xl">
+                  <p className="text-3xl font-black text-green-600">{currentSession.teams.length}</p>
+                  <p className="text-sm text-green-700">참가 팀</p>
+                </div>
+                <div className="p-4 bg-purple-50 rounded-xl">
+                  <p className="text-3xl font-black text-purple-600">
+                    {gameState.completedBingoLines.length}
+                  </p>
+                  <p className="text-sm text-purple-700">완성 빙고</p>
+                </div>
+              </div>
+
+              {/* 버튼 */}
+              <div className="mt-8 flex gap-4">
+                <button
+                  onClick={handleDownloadPDF}
+                  className="flex-1 py-4 bg-blue-600 text-white font-bold text-lg rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Download className="w-6 h-6" />
+                  결과 리포트 다운로드 (PDF)
+                </button>
+                <button
+                  onClick={() => setShowEndGameModal(false)}
+                  className="flex-1 py-4 bg-gray-800 text-white font-bold text-lg rounded-xl hover:bg-gray-900 transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
         </div>

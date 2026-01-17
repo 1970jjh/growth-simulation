@@ -18,7 +18,7 @@ import {
 } from '../lib/firestore';
 import BingoBoard from './BingoBoard';
 import CardModal from './CardModal';
-import { Users, Loader2, Trophy, Hand, Clock, CheckCircle } from 'lucide-react';
+import { Users, Loader2, Trophy, Hand, Clock, CheckCircle, Download } from 'lucide-react';
 
 interface ParticipantViewProps {
   sessionId: string;
@@ -149,6 +149,159 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
       alert('답변 제출에 실패했습니다.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // 참가자용 PDF 다운로드 (내 팀 결과)
+  const handleDownloadMyResultPDF = () => {
+    if (!session || !gameState || !myTeam) return;
+
+    // 내 팀의 라운드 결과만 추출
+    const myTeamResults = gameState.roundResults.map(result => {
+      const myAnswer = result.allAnswers.find(a => a.teamId === myTeam.id);
+      const card = session.bingoCards.find(c => c.id === result.cardId);
+      return { result, myAnswer, card };
+    }).filter(r => r.myAnswer);
+
+    // 누적 점수 계산
+    let totalScore = 0;
+    myTeamResults.forEach(r => {
+      if (r.myAnswer?.aiScore) {
+        totalScore += r.myAnswer.aiScore;
+      }
+    });
+    totalScore += myTeam.bingoCount * 500;
+
+    const pdfContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${session.name} - ${myTeam.name} 결과</title>
+  <style>
+    body { font-family: 'Malgun Gothic', sans-serif; padding: 30px; max-width: 700px; margin: 0 auto; }
+    h1 { color: #1f2937; border-bottom: 3px solid #7c3aed; padding-bottom: 10px; font-size: 1.5em; }
+    h2 { color: #374151; margin-top: 25px; border-left: 4px solid #7c3aed; padding-left: 10px; font-size: 1.2em; }
+    .summary { background: #f3e8ff; padding: 20px; border-radius: 10px; margin: 20px 0; }
+    .summary-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e9d5ff; }
+    .summary-item:last-child { border-bottom: none; }
+    .round-section { background: #f9fafb; padding: 15px; border-radius: 10px; margin: 15px 0; page-break-inside: avoid; }
+    .situation { background: white; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 10px 0; }
+    .my-answer { background: #eff6ff; padding: 12px; border-radius: 8px; margin: 10px 0; }
+    .ai-feedback { background: #ecfdf5; padding: 12px; border-radius: 8px; margin: 10px 0; }
+    .score { color: #7c3aed; font-weight: bold; font-size: 1.3em; }
+    .metrics { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+    .metric { background: white; padding: 8px 12px; border-radius: 5px; border: 1px solid #e5e7eb; text-align: center; }
+    @media print { body { padding: 15px; } }
+  </style>
+</head>
+<body>
+  <h1>📊 ${session.name}</h1>
+  <p style="color: #6b7280;">${myTeam.name} 개인 결과 리포트</p>
+  <p style="color: #9ca3af; font-size: 0.9em;">생성일시: ${new Date().toLocaleString('ko-KR')}</p>
+
+  <div class="summary">
+    <h2 style="margin-top: 0; border: none; padding: 0;">🏆 최종 성과</h2>
+    <div class="summary-item">
+      <span>총 획득 점수</span>
+      <span class="score">${totalScore}점</span>
+    </div>
+    <div class="summary-item">
+      <span>참여 라운드</span>
+      <span>${myTeamResults.length}라운드</span>
+    </div>
+    <div class="summary-item">
+      <span>점령한 칸</span>
+      <span>${myTeam.ownedCells.length}개</span>
+    </div>
+    <div class="summary-item">
+      <span>빙고</span>
+      <span>${myTeam.bingoCount}줄 ${myTeam.bingoCount > 0 ? `(+${myTeam.bingoCount * 500}점)` : ''}</span>
+    </div>
+  </div>
+
+  <h2>📝 라운드별 상세 결과</h2>
+  ${myTeamResults.map(({ result, myAnswer, card }, idx) => {
+    // 피드백 파싱
+    const feedback = myAnswer?.aiFeedback || '';
+    const summaryMatch = feedback.match(/\\[총평\\]\\n?([\\s\\S]*?)(?=\\[모범답안\\]|$)/);
+    const summary = summaryMatch ? summaryMatch[1].trim() : '';
+    const modelMatch = feedback.match(/\\[모범답안\\]\\n?([\\s\\S]*?)(?=\\[METRICS\\]|$)/);
+    const modelAnswer = modelMatch ? modelMatch[1].trim() : '';
+
+    // 메트릭 파싱
+    const metricsMatch = feedback.match(/\\[METRICS\\]\\n?([\\s\\S]*?)(?=\\[SCORES\\]|$)/);
+    let metrics = { resource: 0, energy: 0, trust: 0, competency: 0, insight: 0 };
+    if (metricsMatch) {
+      const parts = metricsMatch[1].trim().split('|');
+      parts.forEach((part: string) => {
+        const [key, value] = part.split(':');
+        if (key && value) {
+          const k = key.toLowerCase().trim();
+          if (k in metrics) (metrics as any)[k] = parseInt(value, 10);
+        }
+      });
+    }
+
+    const selectedChoice = card?.choices.find(c => c.id === myAnswer?.choiceId);
+
+    return `
+      <div class="round-section">
+        <h3 style="margin-top: 0;">라운드 ${idx + 1}: ${result.cardTitle}</h3>
+
+        <div class="situation">
+          <strong>상황:</strong><br/>
+          ${card?.situation || ''}
+        </div>
+
+        <div class="my-answer">
+          <strong>우리 팀의 선택:</strong> ${myAnswer?.choiceId}. ${selectedChoice?.text || ''}<br/>
+          <strong>선택 이유:</strong> ${myAnswer?.reasoning || ''}<br/>
+          <strong>획득 점수:</strong> <span class="score">${myAnswer?.aiScore || 0}점</span>
+        </div>
+
+        ${summary ? `
+        <div class="ai-feedback">
+          <strong>🤖 AI 분석:</strong><br/>
+          ${summary}
+        </div>
+        ` : ''}
+
+        ${modelAnswer ? `
+        <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin: 10px 0;">
+          <strong>📝 모범 답안:</strong><br/>
+          ${modelAnswer}
+        </div>
+        ` : ''}
+
+        <div class="metrics">
+          ${Object.entries(metrics).map(([key, value]) => `
+            <div class="metric">
+              <div style="font-size: 0.7em; color: #6b7280;">${key.toUpperCase()}</div>
+              <div style="font-weight: bold; color: ${Number(value) > 0 ? '#059669' : Number(value) < 0 ? '#dc2626' : '#6b7280'};">
+                ${Number(value) > 0 ? '+' : ''}${value}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('')}
+
+  <footer style="margin-top: 30px; text-align: center; color: #9ca3af; font-size: 0.8em;">
+    Workplace Scenario Bingo - ${myTeam.name} 결과 리포트
+  </footer>
+</body>
+</html>`;
+
+    // PDF 다운로드 (HTML을 새 창에서 인쇄)
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(pdfContent);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.print();
+      };
     }
   };
 
@@ -438,6 +591,15 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
                   );
                 })}
             </div>
+
+            {/* PDF 다운로드 버튼 */}
+            <button
+              onClick={handleDownloadMyResultPDF}
+              className="mt-6 px-6 py-4 bg-purple-600 text-white font-bold text-lg rounded-xl border-2 border-black shadow-hard hover:bg-purple-700 flex items-center justify-center gap-2 mx-auto"
+            >
+              <Download className="w-6 h-6" />
+              내 결과 PDF 다운로드
+            </button>
           </div>
         )}
 
