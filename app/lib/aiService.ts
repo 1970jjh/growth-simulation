@@ -3,7 +3,8 @@ import { GameCard, TeamAnswer, AIEvaluationResult } from '../types';
 
 // Gemini API 키 (실제 배포 시에는 환경변수로 관리)
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+// gemini-1.5-flash 사용 (gemini-pro는 더 이상 지원되지 않음)
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 interface GeminiResponse {
   candidates: Array<{
