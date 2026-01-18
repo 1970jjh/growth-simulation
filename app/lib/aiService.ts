@@ -3,7 +3,7 @@ import { GameCard, TeamAnswer, AIEvaluationResult } from '../types';
 
 // Gemini API 키 (실제 배포 시에는 환경변수로 관리)
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
 
 interface GeminiResponse {
   candidates: Array<{
@@ -121,41 +121,56 @@ export async function evaluateAnswer(
     const apiUrl = `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`;
 
     console.log('API 호출 URL:', GEMINI_API_URL);
+    console.log('요청 팀:', answer.teamId, '선택:', answer.choiceId);
+
+    const requestBody = {
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1500,
+      }
+    };
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1500,
-        }
-      })
+      body: JSON.stringify(requestBody)
     });
 
-    console.log('API 응답 상태:', response.status);
+    console.log('API 응답 상태:', response.status, response.statusText);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('API 오류 응답:', errorText);
-      throw new Error(`API 오류: ${response.status}`);
+      console.error('요청 본문 (디버깅):', JSON.stringify(requestBody, null, 2).slice(0, 500));
+      throw new Error(`Gemini API 오류: ${response.status} - ${response.statusText}`);
     }
 
     const data: GeminiResponse = await response.json();
+    console.log('Gemini 응답 데이터:', JSON.stringify(data).slice(0, 300) + '...');
+
     const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    if (!textResponse) {
+      console.error('Gemini 응답이 비어있습니다. 전체 응답:', JSON.stringify(data));
+      throw new Error('Gemini 응답이 비어있습니다.');
+    }
+
+    console.log('Gemini 텍스트 응답:', textResponse.slice(0, 200) + '...');
 
     // JSON 파싱
     const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error('JSON 형식을 찾을 수 없습니다. 원본 응답:', textResponse);
       throw new Error('JSON 응답을 찾을 수 없습니다.');
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+    console.log('파싱된 평가 결과:', { reasoningScore: parsed.reasoningScore, metrics: parsed.metrics });
     const reasoningScore = Math.min(100, Math.max(60, Number(parsed.reasoningScore) || 70));
 
     // 최종 점수 = 선택지 점수 + 이유 가산점 (평균)
