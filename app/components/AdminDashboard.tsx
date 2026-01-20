@@ -954,8 +954,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                     {/* 답변 현황 */}
                     {gameState.phase === GamePhase.AllTeamsAnswering && (
                       <div>
-                        <p className="font-bold mb-2">답변 현황</p>
-                        <div className="flex gap-2 flex-wrap">
+                        <p className="font-bold mb-2">답변 현황 ({gameState.teamAnswers.length}/{currentSession.teams.length}팀 제출)</p>
+                        <div className="flex gap-2 flex-wrap mb-4">
                           {currentSession.teams.map(team => {
                             const hasAnswered = gameState.teamAnswers.some(
                               a => a.teamId === team.id
@@ -974,6 +974,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                             );
                           })}
                         </div>
+
+                        {/* 제출된 답변 실시간 표시 */}
+                        {gameState.teamAnswers.length > 0 && (
+                          <div className="space-y-3 mb-4">
+                            <p className="font-bold text-gray-700 flex items-center gap-2">
+                              <Eye className="w-4 h-4" /> 제출된 답변 내용
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {gameState.teamAnswers.map(answer => {
+                                const team = currentSession.teams.find(t => t.id === answer.teamId);
+                                const color = team ? TEAM_COLORS[team.colorIndex] : TEAM_COLORS[0];
+                                const selectedChoice = gameState.currentCard?.choices.find(c => c.id === answer.choiceId);
+                                return (
+                                  <div
+                                    key={answer.teamId}
+                                    className="p-3 rounded-lg border-2"
+                                    style={{ borderColor: color.bg, backgroundColor: color.light }}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <div
+                                          className="w-3 h-3 rounded-full"
+                                          style={{ backgroundColor: color.bg }}
+                                        />
+                                        <span className="font-bold">{answer.teamName}</span>
+                                      </div>
+                                      <span className="px-2 py-1 bg-white rounded font-bold text-sm border" style={{ borderColor: color.bg }}>
+                                        선택: {answer.choiceId}
+                                      </span>
+                                    </div>
+                                    {selectedChoice && (
+                                      <p className="text-xs text-gray-600 mb-2 bg-white p-1 rounded">
+                                        {selectedChoice.text}
+                                      </p>
+                                    )}
+                                    <div className="bg-white p-2 rounded border border-gray-200">
+                                      <p className="text-xs text-gray-500 font-bold mb-1">선택 이유:</p>
+                                      <p className="text-sm text-gray-800 line-clamp-3">{answer.reasoning}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
 
                         {gameState.teamAnswers.length === currentSession.teams.length && (
                           <button
