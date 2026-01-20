@@ -6,7 +6,8 @@ import {
   GamePhase,
   TeamAnswer,
   TEAM_COLORS,
-  Player
+  Player,
+  GameCard
 } from '../types';
 import {
   subscribeToSession,
@@ -18,7 +19,7 @@ import {
 } from '../lib/firestore';
 import BingoBoard from './BingoBoard';
 import CardModal from './CardModal';
-import { Users, Loader2, Trophy, Hand, Clock, CheckCircle, Download } from 'lucide-react';
+import { Users, Loader2, Trophy, Hand, Clock, CheckCircle, Download, X, Eye, Play } from 'lucide-react';
 
 interface ParticipantViewProps {
   sessionId: string;
@@ -39,6 +40,10 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
   // UI 상태
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
+
+  // 미리보기 상태 (카드 내용 확인용)
+  const [previewCellIndex, setPreviewCellIndex] = useState<number | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   // 실시간 구독
   useEffect(() => {
@@ -108,19 +113,41 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
     }
   };
 
-  // 빙고 칸 선택 (내 턴일 때만)
-  const handleCellSelect = async (cellIndex: number) => {
-    if (!gameState || !isMyTurn || gameState.phase !== GamePhase.SelectingCard) return;
-
+  // 빙고 칸 클릭 (모든 참가자가 미리보기 가능)
+  const handleCellClick = (cellIndex: number) => {
     const cell = session.bingoCells[cellIndex];
+    if (!cell) return;
+
+    // 미리보기 모달 열기
+    setPreviewCellIndex(cellIndex);
+    setShowPreviewModal(true);
+  };
+
+  // 미리보기 중인 카드 가져오기
+  const getPreviewCard = (): GameCard | null => {
+    if (previewCellIndex === null) return null;
+    const cell = session.bingoCells[previewCellIndex];
+    if (!cell) return null;
+    return session.bingoCards.find(c => c.id === cell.cardId) || null;
+  };
+
+  // 실제로 칸을 선택하고 답변 단계로 진행 (내 턴일 때만)
+  const handleConfirmCellSelect = async () => {
+    if (!gameState || !isMyTurn || gameState.phase !== GamePhase.SelectingCard || previewCellIndex === null) return;
+
+    const cell = session.bingoCells[previewCellIndex];
     if (!cell || cell.isCompleted) return;
 
     const card = session.bingoCards.find(c => c.id === cell.cardId);
     if (!card) return;
 
+    // 미리보기 모달 닫기
+    setShowPreviewModal(false);
+    setPreviewCellIndex(null);
+
     // 선택된 칸과 카드 설정, 모든 팀 답변 단계로 전환
     await updateGameState(sessionId, {
-      selectedCellIndex: cellIndex,
+      selectedCellIndex: previewCellIndex,
       currentCard: card,
       phase: GamePhase.AllTeamsAnswering,
       teamAnswers: []
@@ -609,14 +636,14 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
           cards={session.bingoCards}
           teams={session.teams}
           selectedCellIndex={gameState?.selectedCellIndex ?? null}
-          onCellClick={isMyTurn && gameState?.phase === GamePhase.SelectingCard ? handleCellSelect : undefined}
-          isSelectable={isMyTurn && gameState?.phase === GamePhase.SelectingCard}
+          onCellClick={handleCellClick}
+          isSelectable={true}
           currentTurnTeamId={currentTurnTeam?.id}
           completedLines={gameState?.completedBingoLines.map((_, i) => i) || []}
         />
       </div>
 
-      {/* 카드 모달 */}
+      {/* 카드 모달 (답변 작성용) */}
       {showCardModal && gameState?.currentCard && myTeam && (
         <CardModal
           card={gameState.currentCard}
@@ -629,6 +656,130 @@ const ParticipantView: React.FC<ParticipantViewProps> = ({ sessionId, initialSes
           showResults={gameState.phase === GamePhase.ShowingResults}
           allAnswers={gameState.teamAnswers}
         />
+      )}
+
+      {/* 미리보기 모달 (카드 내용 확인용) */}
+      {showPreviewModal && previewCellIndex !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-70">
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl">
+            {/* 모달 헤더 */}
+            <div className="sticky top-0 z-10 flex items-center justify-between p-4 bg-white border-b rounded-t-xl">
+              <div className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-blue-500" />
+                <h2 className="text-lg font-black text-gray-800">
+                  {getPreviewCard()?.title || '카드 미리보기'}
+                </h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewCellIndex(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* 칸 상태 표시 */}
+              {(() => {
+                const cell = session.bingoCells[previewCellIndex];
+                const ownerTeam = cell?.ownerTeamId
+                  ? session.teams.find(t => t.id === cell.ownerTeamId)
+                  : null;
+
+                return (
+                  <div className={`p-2 rounded-lg text-center text-sm ${
+                    cell?.isCompleted
+                      ? 'bg-gray-100 text-gray-600'
+                      : 'bg-blue-50 text-blue-700'
+                  }`}>
+                    {cell?.isCompleted ? (
+                      ownerTeam ? (
+                        <span>
+                          <span
+                            className="inline-block w-3 h-3 rounded-full mr-1"
+                            style={{ backgroundColor: TEAM_COLORS[ownerTeam.colorIndex].bg }}
+                          />
+                          {ownerTeam.name}이(가) 점령한 칸입니다
+                        </span>
+                      ) : '이미 완료된 칸입니다'
+                    ) : (
+                      '아직 선택되지 않은 칸입니다'
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 상황 설명 */}
+              {getPreviewCard() && (
+                <>
+                  <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <h3 className="text-sm font-bold text-gray-500 mb-2">상황</h3>
+                    <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+                      {getPreviewCard()?.situation}
+                    </p>
+                  </div>
+
+                  {/* 선택지 */}
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-500 mb-3">선택지</h3>
+                    <div className="space-y-2">
+                      {getPreviewCard()?.choices.map((choice) => (
+                        <div
+                          key={choice.id}
+                          className="p-3 bg-gray-50 rounded-lg border border-gray-200"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-gray-200 font-bold text-sm">
+                              {choice.id}
+                            </span>
+                            <span className="text-gray-800 text-sm">{choice.text}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 학습 포인트 (완료된 칸이면 표시) */}
+                  {session.bingoCells[previewCellIndex]?.isCompleted && getPreviewCard()?.learningPoint && (
+                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <h3 className="text-sm font-bold text-blue-600 mb-1">학습 포인트</h3>
+                      <p className="text-blue-800 text-sm">{getPreviewCard()?.learningPoint}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* 버튼 영역 */}
+            <div className="sticky bottom-0 p-4 bg-white border-t space-y-2">
+              {/* 내 턴이고 선택 단계이고, 아직 완료되지 않은 칸일 때만 "답변 작성하기" 버튼 표시 */}
+              {isMyTurn &&
+               gameState?.phase === GamePhase.SelectingCard &&
+               !session.bingoCells[previewCellIndex]?.isCompleted && (
+                <button
+                  onClick={handleConfirmCellSelect}
+                  className="w-full py-4 bg-blue-600 text-white font-bold rounded-lg border-2 border-black shadow-hard hover:bg-blue-700 flex items-center justify-center gap-2"
+                >
+                  <Play className="w-5 h-5" />
+                  이 문제로 답변 작성하기
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewCellIndex(null);
+                }}
+                className="w-full py-3 bg-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-300"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 결과 보기 버튼 (제출 후) */}
