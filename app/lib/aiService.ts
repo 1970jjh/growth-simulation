@@ -15,8 +15,8 @@ interface GeminiResponse {
   }>;
 }
 
-// AI 평가 프롬프트 생성 (개선된 버전: 상황 맞춤 분석 + 공정한 점수 부여)
-function createReasoningPrompt(card: GameCard, answer: TeamAnswer): string {
+// AI 평가 프롬프트 생성 (개선된 버전: 상황 맞춤 분석 + 차등 점수 부여)
+function createReasoningPrompt(card: GameCard, answer: TeamAnswer, teamIndex: number): string {
   const selectedChoice = card.choices.find(c => c.id === answer.choiceId);
   const choiceText = selectedChoice?.text || '';
   const choiceBaseScore = selectedChoice?.score ?? 80;
@@ -51,16 +51,40 @@ ${choicesWithScores}
 "${answer.reasoning}"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 평가 기준
+📊 평가 기준 (매우 중요!)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**이유 점수 (reasoningScore) 부여 기준:**
-- 90-100점: 상황을 정확히 이해하고, 선택의 장단점을 깊이있게 분석함. 구체적인 근거와 실행 방안 제시
-- 80-89점: 상황을 잘 이해하고 합리적인 이유를 제시함. 다소 일반적이지만 타당함
-- 70-79점: 기본적인 이해는 있으나 분석이 피상적임. 더 깊은 고찰 필요
-- 60-69점: 상황 이해가 부족하거나, 이유가 선택과 잘 맞지 않음. 논리적 연결 부족
+**핵심 평가 원칙 (가산점 기준):**
 
-**중요: 이유의 질이 좋으면 선택이 차선책이더라도 높은 이유점수를, 이유가 부실하면 최적 선택이라도 낮은 이유점수를 부여하세요.**
+1. **조직 협업과 화합 중시 (+5~+10점)**
+   - 팀워크, 협업, 소통을 강조하는 이유
+   - 동료나 조직 전체를 배려하는 관점
+   - "함께", "우리", "팀" 등의 표현 사용
+
+2. **모범적 팔로워십 (+5~+10점)**
+   - 상사나 조직의 방침을 존중하면서도 건설적 의견 제시
+   - 주어진 역할 내에서 최선을 다하려는 태도
+   - 조직의 목표와 개인의 역할을 잘 이해
+
+3. **구체적이고 논리적인 근거 (+3~+7점)**
+   - 추상적이지 않고 구체적인 실행 방안 제시
+   - 상황의 맥락을 정확히 파악한 분석
+   - 단순한 감정이 아닌 논리적 설명
+
+4. **감점 요소 (-5~-10점)**
+   - 지나친 개인주의적 관점
+   - 조직이나 동료를 무시하는 태도
+   - 피상적이거나 근거 없는 이유
+
+**이유 점수 (reasoningScore) 세부 기준:**
+- 95-100점: 조직 협업 + 팔로워십 + 구체적 근거 모두 우수
+- 88-94점: 위 요소 중 2가지 이상 우수
+- 80-87점: 기본적으로 합리적이나 깊이 부족
+- 72-79점: 일부 요소만 충족, 개선 필요
+- 65-71점: 피상적이거나 조직 관점 부족
+- 60-64점: 근거 부실하거나 부적절한 관점
+
+**⚠️ 중요: 각 참가자마다 다른 점수를 부여하세요. 같은 선택이라도 이유의 질에 따라 점수 차이를 두세요. 팀 인덱스 ${teamIndex}을 고려하여 미세한 차이라도 점수를 구분하세요.**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📝 응답 형식 (JSON)
@@ -72,7 +96,9 @@ ${choicesWithScores}
   "situationAnalysis": "이 상황에서 핵심적으로 고려해야 할 점이 무엇인지 1-2문장으로 설명",
   "choiceEvaluation": "참가자가 선택한 답변이 이 상황에 얼마나 적절한지 1-2문장으로 평가",
   "reasoningEvaluation": "참가자가 작성한 이유가 얼마나 논리적이고 깊이있는지 1-2문장으로 평가",
-  "reasoningScore": 60-100 사이의 정수 (위의 기준에 따라 부여),
+  "reasoningScore": 60-100 사이의 정수 (위의 세부 기준에 따라 차등 부여),
+  "collaborationBonus": 조직 협업/화합 관련 내용에 대한 가산점 (0-10),
+  "followershipBonus": 모범적 팔로워십 관련 내용에 대한 가산점 (0-10),
   "summary": "이 참가자에게 해주고 싶은 총평 (상황과 선택에 맞춤으로 2-3문장)",
   "modelAnswer": "이 상황에서 가장 이상적인 대응과 그 이유를 구체적으로 2-3문장으로",
   "metrics": {
@@ -103,7 +129,8 @@ function getChoiceBaseScore(card: GameCard, choiceId: string): number {
 // AI 평가 실행 (기본점수 + 이유 가산점)
 export async function evaluateAnswer(
   card: GameCard,
-  answer: TeamAnswer
+  answer: TeamAnswer,
+  teamIndex: number = 0
 ): Promise<AIEvaluationResult> {
   // 선택지 기본 점수
   const baseScore = getChoiceBaseScore(card, answer.choiceId);
@@ -111,13 +138,13 @@ export async function evaluateAnswer(
   // API 키가 없으면 더미 결과 반환
   if (!GEMINI_API_KEY) {
     console.warn('Gemini API 키가 설정되지 않았습니다. 더미 결과를 반환합니다.');
-    return createDummyResult(answer.teamId, baseScore, answer.choiceId, card);
+    return createDummyResult(answer.teamId, baseScore, answer.choiceId, card, teamIndex);
   }
 
   console.log('AI 평가 시작 - API 키 존재:', !!GEMINI_API_KEY);
 
   try {
-    const prompt = createReasoningPrompt(card, answer);
+    const prompt = createReasoningPrompt(card, answer, teamIndex);
     const apiUrl = `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`;
 
     console.log('API 호출 URL:', GEMINI_API_URL);
@@ -219,24 +246,119 @@ RESOURCE:${resource >= 0 ? '+' : ''}${resource}|ENERGY:${energy >= 0 ? '+' : ''}
 
   } catch (error) {
     console.error('AI 평가 오류:', error);
-    return createDummyResult(answer.teamId, baseScore, answer.choiceId, card);
+    return createDummyResult(answer.teamId, baseScore, answer.choiceId, card, teamIndex);
   }
 }
 
-// 여러 팀 답변 동시 평가
+// 여러 팀 답변 동시 평가 (동점 방지 로직 포함)
 export async function evaluateAllAnswers(
   card: GameCard,
   answers: TeamAnswer[]
 ): Promise<AIEvaluationResult[]> {
+  // 각 팀별로 인덱스를 전달하여 평가
   const evaluations = await Promise.all(
-    answers.map(answer => evaluateAnswer(card, answer))
+    answers.map((answer, index) => evaluateAnswer(card, answer, index))
   );
-  return evaluations;
+
+  // 동점 방지: 같은 점수가 있으면 미세 조정
+  const adjustedEvaluations = preventTieScores(evaluations, answers);
+
+  return adjustedEvaluations;
 }
 
-// 더미 결과 생성 (API 키가 없거나 오류 시)
-function createDummyResult(teamId: string, baseScore: number, choiceId: string, card?: GameCard): AIEvaluationResult {
-  const reasoningScore = Math.floor(Math.random() * 30) + 70; // 70-100점
+// 동점 방지 함수: 같은 점수가 있으면 이유의 질에 따라 차등 부여
+function preventTieScores(
+  evaluations: AIEvaluationResult[],
+  answers: TeamAnswer[]
+): AIEvaluationResult[] {
+  // 점수별로 그룹화
+  const scoreGroups = new Map<number, AIEvaluationResult[]>();
+  evaluations.forEach(ev => {
+    const group = scoreGroups.get(ev.score) || [];
+    group.push(ev);
+    scoreGroups.set(ev.score, group);
+  });
+
+  // 동점인 그룹이 있으면 조정
+  const adjusted = [...evaluations];
+  scoreGroups.forEach((group, score) => {
+    if (group.length > 1) {
+      // 동점인 팀들을 이유의 질에 따라 정렬하고 점수 조정
+      const sortedGroup = [...group].sort((a, b) => {
+        const answerA = answers.find(ans => ans.teamId === a.teamId);
+        const answerB = answers.find(ans => ans.teamId === b.teamId);
+
+        // 이유의 품질 점수 계산
+        const qualityA = calculateReasoningQuality(answerA?.reasoning || '');
+        const qualityB = calculateReasoningQuality(answerB?.reasoning || '');
+
+        return qualityB - qualityA; // 높은 점수 순
+      });
+
+      // 순위에 따라 점수 조정 (1점씩 차이)
+      sortedGroup.forEach((ev, idx) => {
+        const adjustedIdx = adjusted.findIndex(e => e.teamId === ev.teamId);
+        if (adjustedIdx !== -1) {
+          // 가장 높은 품질은 +1, 그 다음은 0, 그 다음은 -1...
+          const adjustment = 1 - idx;
+          adjusted[adjustedIdx] = {
+            ...adjusted[adjustedIdx],
+            score: Math.min(100, Math.max(60, score + adjustment))
+          };
+        }
+      });
+    }
+  });
+
+  // 최종 확인: 여전히 동점이 있으면 강제로 1점씩 차이 부여
+  const finalScores = new Set<number>();
+  adjusted.sort((a, b) => b.score - a.score);
+
+  return adjusted.map((ev, idx) => {
+    let newScore = ev.score;
+    // 이미 사용된 점수면 1점 낮추기
+    while (finalScores.has(newScore) && newScore > 60) {
+      newScore--;
+    }
+    finalScores.add(newScore);
+    return { ...ev, score: newScore };
+  });
+}
+
+// 이유의 품질 점수 계산 (협업, 팔로워십, 구체성 등)
+function calculateReasoningQuality(reasoning: string): number {
+  let quality = 0;
+
+  // 협업/화합 키워드 (높은 가중치)
+  const collaborationKeywords = ['협업', '팀워크', '함께', '우리', '팀', '소통', '화합', '배려', '존중', '동료'];
+  collaborationKeywords.forEach(kw => {
+    if (reasoning.includes(kw)) quality += 3;
+  });
+
+  // 팔로워십 키워드 (높은 가중치)
+  const followershipKeywords = ['팔로워', '상사', '조직', '역할', '책임', '지시', '보고', '존중', '신뢰'];
+  followershipKeywords.forEach(kw => {
+    if (reasoning.includes(kw)) quality += 3;
+  });
+
+  // 구체성/논리성 키워드
+  const logicKeywords = ['구체적', '논리적', '분석', '근거', '합리적', '타당', '적절', '효율', '효과', '방안', '실행'];
+  logicKeywords.forEach(kw => {
+    if (reasoning.includes(kw)) quality += 2;
+  });
+
+  // 이유 길이 가산점 (최대 10점)
+  quality += Math.min(10, Math.floor(reasoning.length / 20));
+
+  return quality;
+}
+
+// 더미 결과 생성 (API 키가 없거나 오류 시) - teamIndex로 차등 점수 부여
+function createDummyResult(teamId: string, baseScore: number, choiceId: string, card?: GameCard, teamIndex: number = 0): AIEvaluationResult {
+  // teamIndex를 활용하여 고유한 점수 생성 (동점 방지)
+  const baseReasoningScore = 75 + Math.floor(Math.random() * 20); // 75-94점
+  const indexAdjustment = (teamIndex % 5) * 2; // 0, 2, 4, 6, 8
+  const reasoningScore = Math.min(100, Math.max(60, baseReasoningScore - indexAdjustment + Math.floor(Math.random() * 3)));
   const finalScore = Math.round((baseScore + reasoningScore) / 2);
 
   // 랜덤 지표 생성

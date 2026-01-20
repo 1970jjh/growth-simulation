@@ -1058,6 +1058,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                               const summaryMatch = feedback.match(/\[총평\]\n?([\s\S]*?)(?=\[모범답안\]|$)/);
                               const summary = summaryMatch ? summaryMatch[1].trim() : '';
 
+                              // 이유평가 파싱 (하이라이트용 키워드 추출)
+                              const reasoningEvalMatch = feedback.match(/\[이유평가\]\n?([\s\S]*?)(?=\[총평\]|$)/);
+                              const reasoningEval = reasoningEvalMatch ? reasoningEvalMatch[1].trim() : '';
+
                               // 메트릭 파싱
                               const metricsMatch = feedback.match(/\[METRICS\]\n?([\s\S]*?)(?=\[SCORES\]|$)/);
                               let metrics = { resource: 0, energy: 0, trust: 0, competency: 0, insight: 0 };
@@ -1072,6 +1076,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                                 });
                               }
 
+                              // 선택한 선택지 정보
+                              const selectedChoice = gameState.currentCard?.choices.find(c => c.id === answer.choiceId);
+                              const team = currentSession.teams.find(t => t.id === answer.teamId);
+                              const color = team ? TEAM_COLORS[team.colorIndex] : TEAM_COLORS[0];
+
+                              // 이유에서 하이라이트할 키워드들 (AI 평가 기준 관련)
+                              const highlightKeywords = [
+                                '협업', '팀워크', '소통', '커뮤니케이션', '조직', '화합', '배려', '존중',
+                                '팔로워', '팔로워십', '리더', '리더십', '책임', '신뢰', '정직',
+                                '구체적', '논리적', '분석', '근거', '합리적', '타당', '적절',
+                                '성장', '발전', '개선', '효율', '효과적', '생산성',
+                                '문제해결', '해결책', '대안', '방안', '실행', '실천'
+                              ];
+
+                              // 이유 텍스트에 하이라이트 적용
+                              const highlightReasoning = (text: string) => {
+                                let result = text;
+                                const foundKeywords: string[] = [];
+                                highlightKeywords.forEach(keyword => {
+                                  const regex = new RegExp(`(${keyword})`, 'gi');
+                                  if (regex.test(result)) {
+                                    foundKeywords.push(keyword);
+                                  }
+                                });
+                                return { text: result, keywords: foundKeywords };
+                              };
+
+                              const { keywords: foundKeywords } = highlightReasoning(answer.reasoning);
+
                               return (
                                 <div
                                   key={answer.teamId}
@@ -1080,14 +1113,58 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ sessions, onSessionsCha
                                   }`}
                                 >
                                   <div className="flex justify-between items-center mb-3">
-                                    <span className="text-xl font-black">
-                                      {idx === 0 && '🏆 '}{answer.teamName}
-                                    </span>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-xl font-black">
+                                        {idx === 0 && '🏆 '}{answer.teamName}
+                                      </span>
+                                      <span
+                                        className="px-3 py-1 rounded-full text-sm font-bold"
+                                        style={{ backgroundColor: color.bg, color: color.text }}
+                                      >
+                                        선택: {answer.choiceId}
+                                      </span>
+                                    </div>
                                     <span className="text-2xl font-black text-purple-600">{answer.aiScore}점</span>
                                   </div>
 
-                                  {/* 총평 */}
-                                  <p className="text-base text-gray-700 mb-4 line-clamp-2">{summary}</p>
+                                  {/* 선택한 선택지 텍스트 */}
+                                  {selectedChoice && (
+                                    <div className="mb-3 p-2 bg-white rounded border border-gray-200">
+                                      <span className="text-xs text-gray-500 font-bold">선택한 답변:</span>
+                                      <p className="text-sm text-gray-800">{selectedChoice.text}</p>
+                                    </div>
+                                  )}
+
+                                  {/* 팀이 작성한 이유 (형광펜 하이라이트) */}
+                                  <div className="mb-3 p-3 bg-white rounded border-2 border-blue-200">
+                                    <span className="text-xs text-blue-600 font-bold mb-1 block">💬 팀이 작성한 이유:</span>
+                                    <p className="text-sm text-gray-800 leading-relaxed">
+                                      {answer.reasoning.split(new RegExp(`(${highlightKeywords.join('|')})`, 'gi')).map((part, i) => {
+                                        const isHighlight = highlightKeywords.some(k => k.toLowerCase() === part.toLowerCase());
+                                        return isHighlight ? (
+                                          <mark key={i} className="bg-yellow-300 px-0.5 rounded font-bold">{part}</mark>
+                                        ) : (
+                                          <span key={i}>{part}</span>
+                                        );
+                                      })}
+                                    </p>
+                                    {foundKeywords.length > 0 && (
+                                      <div className="mt-2 flex flex-wrap gap-1">
+                                        <span className="text-[10px] text-gray-400">핵심 키워드:</span>
+                                        {[...new Set(foundKeywords)].slice(0, 5).map((kw, i) => (
+                                          <span key={i} className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">
+                                            {kw}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* AI 총평 */}
+                                  <p className="text-sm text-gray-700 mb-3 p-2 bg-purple-50 rounded border border-purple-200">
+                                    <span className="text-xs text-purple-600 font-bold">🤖 AI 총평: </span>
+                                    {summary}
+                                  </p>
 
                                   {/* 5개 지표 */}
                                   <div className="grid grid-cols-5 gap-2">
